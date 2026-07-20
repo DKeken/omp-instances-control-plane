@@ -166,7 +166,7 @@ bun run check
 
 - `packages/mcp-server`: MCP server и единый локальный protocol.
 - `packages/omp-extension`: runtime extension OMP, импортирующий canonical protocol.
-- `install.sh`: идемпотентная установка, обновление и очистка старой editor integration.
+- `install.sh`: идемпотентная установка и обновление.
 - `skills/omp-orchestration`: необязательная инструкция для агентов и операторов.
 
 ## Лицензия

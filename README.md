@@ -91,7 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/DKeken/omp-instances-control-plane/
 
 ## Updating
 
-Run install command again. Installer downloads selected branch, builds in temporary directory, then swaps installation directory. Existing OMP extension and MCP config are backed up first.
+Run install command again. Installer downloads selected branch into a temporary directory, installs locked dependencies, then atomically swaps installation directory and extension symlink. Existing OMP extension and MCP config are backed up first.
 
 Restart OMP processes so they load new runtime extension and MCP configuration.
 
