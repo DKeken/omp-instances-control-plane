@@ -91,21 +91,28 @@ curl -fsSL https://raw.githubusercontent.com/DKeken/omp-instances-control-plane/
 
 ## Updating
 
-Run install command again. Installer downloads selected branch into a temporary directory, installs locked dependencies, then atomically swaps installation directory and extension symlink. Existing OMP extension and MCP config are backed up first.
+Run install command again. Installer prepares source, locked dependencies, and merged MCP configuration before changing active files. It then archives previous installation and atomically activates repository, extension symlink, and MCP config. Any activation error restores previous state.
 
 Restart OMP processes so they load new runtime extension and MCP configuration.
 
-## Rollback
+## Rollback and uninstall
 
-Backups are stored in `~/.omp/agent/backups` with timestamps.
+Backups are stored in `~/.omp/agent/backups` with one timestamp per installation.
 
-To restore MCP configuration:
+To roll back an upgrade, stop OMP processes and restore matching repository and MCP backups:
 
 ```sh
+rm -rf ~/.local/share/omp-instances-control-plane
+tar -xzf ~/.omp/agent/backups/omp-instances-control-plane.<timestamp>.tar.gz \
+  -C ~/.local/share
 cp ~/.omp/agent/backups/mcp.json.<timestamp>.bak ~/.omp/agent/mcp.json
 ```
 
-If an extension existed before installation, restore its timestamped backup or saved symlink target. For a first-install uninstall, remove `~/.omp/agent/extensions/omp-control.ts` and restore the MCP backup or delete only `mcpServers["omp-instances"]`. Stop OMP processes first, then restart them.
+Installed extension symlink points to stable installation path, so restored repository supplies previous runtime automatically. Restart OMP processes after rollback.
+
+If `OMP_INSTANCES_HOME`, `OMP_HOME`, or `OMP_MCP_CONFIG` was customized, use those paths instead.
+
+For a first-install uninstall, stop OMP processes, remove `~/.omp/agent/extensions/omp-control.ts`, restore MCP backup or delete only `mcpServers["omp-instances"]`, then remove installation directory.
 
 ## Security
 

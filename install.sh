@@ -24,11 +24,44 @@ command -v omp >/dev/null 2>&1 || fail "Oh My Pi must be installed first: https:
 
 BUN_BIN="$(command -v bun)"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omp-instances-install.XXXXXX")"
-cleanup() {
-  rm -rf "$TMP_ROOT"
-}
-trap cleanup EXIT HUP INT TERM
+INSTALL_STAMP="$(date +%Y%m%d%H%M%S)"
+PREVIOUS_ROOT=""
+ACTIVATING=0
+HAD_MCP_CONFIG=0
+HAD_TS_EXTENSION=0
+HAD_JS_EXTENSION=0
+EXTENSION_BACKUP_DIR="$OMP_HOME/backups/omp-control.$INSTALL_STAMP"
+MCP_BACKUP="$OMP_HOME/backups/mcp.json.$INSTALL_STAMP.bak"
+ROOT_BACKUP="$OMP_HOME/backups/omp-instances-control-plane.$INSTALL_STAMP.tar.gz"
 
+rollback() {
+  status=$?
+  if [ "$ACTIVATING" -eq 1 ]; then
+    printf '%s\n' "[omp-instances] activation failed; restoring previous installation" >&2
+    rm -rf "$INSTALL_ROOT"
+    if [ -n "$PREVIOUS_ROOT" ] && [ -e "$PREVIOUS_ROOT" ]; then
+      mv "$PREVIOUS_ROOT" "$INSTALL_ROOT"
+    fi
+
+    rm -f "$OMP_HOME/extensions/omp-control.ts" "$OMP_HOME/extensions/omp-control.js"
+    if [ "$HAD_TS_EXTENSION" -eq 1 ]; then
+      cp -P "$EXTENSION_BACKUP_DIR/omp-control.ts" "$OMP_HOME/extensions/omp-control.ts"
+    fi
+    if [ "$HAD_JS_EXTENSION" -eq 1 ]; then
+      cp -P "$EXTENSION_BACKUP_DIR/omp-control.js" "$OMP_HOME/extensions/omp-control.js"
+    fi
+
+    if [ "$HAD_MCP_CONFIG" -eq 1 ]; then
+      cp "$MCP_BACKUP" "$MCP_CONFIG"
+      chmod 600 "$MCP_CONFIG"
+    else
+      rm -f "$MCP_CONFIG"
+    fi
+  fi
+  rm -rf "$TMP_ROOT"
+  exit "$status"
+}
+trap rollback EXIT HUP INT TERM
 
 log "downloading $REPOSITORY@$REF"
 curl -fsSL "$ARCHIVE_URL" -o "$TMP_ROOT/source.tar.gz"
@@ -41,65 +74,36 @@ log "installing locked dependencies"
   bun install --frozen-lockfile
 )
 
+mkdir -p "$OMP_HOME/extensions" "$OMP_HOME/backups" "$(dirname "$MCP_CONFIG")" "$(dirname "$INSTALL_ROOT")"
 
-mkdir -p "$(dirname "$INSTALL_ROOT")"
-PREVIOUS_ROOT=""
-if [ -e "$INSTALL_ROOT" ]; then
-  PREVIOUS_ROOT="$INSTALL_ROOT.previous.$(date +%Y%m%d%H%M%S)"
-  mv "$INSTALL_ROOT" "$PREVIOUS_ROOT"
-fi
-if ! mv "$TMP_ROOT/source" "$INSTALL_ROOT"; then
-  if [ -n "$PREVIOUS_ROOT" ] && [ -e "$PREVIOUS_ROOT" ]; then
-    mv "$PREVIOUS_ROOT" "$INSTALL_ROOT"
-  fi
-  fail "could not activate installation"
-fi
-rm -rf "$PREVIOUS_ROOT"
-
-mkdir -p "$OMP_HOME/extensions" "$OMP_HOME/backups"
-INSTALL_STAMP="$(date +%Y%m%d%H%M%S)"
-for extension_path in "$OMP_HOME/extensions/omp-control.ts" "$OMP_HOME/extensions/omp-control.js"; do
-  if [ -e "$extension_path" ] || [ -L "$extension_path" ]; then
-    extension_name="$(basename "$extension_path")"
-    if [ -L "$extension_path" ]; then
-      readlink "$extension_path" > "$OMP_HOME/backups/$extension_name.$INSTALL_STAMP.symlink.bak" || true
-    else
-      cp "$extension_path" "$OMP_HOME/backups/$extension_name.$INSTALL_STAMP.bak"
-    fi
-    rm -f "$extension_path"
-  fi
-done
-EXTENSION_TARGET="$OMP_HOME/extensions/omp-control.ts"
-EXTENSION_TEMP="$OMP_HOME/extensions/.omp-control.ts.$$.tmp"
-ln -s "$INSTALL_ROOT/packages/omp-extension/omp-control.ts" "$EXTENSION_TEMP"
-mv "$EXTENSION_TEMP" "$EXTENSION_TARGET"
-
-mkdir -p "$(dirname "$MCP_CONFIG")"
 if [ -e "$MCP_CONFIG" ]; then
-  MCP_BACKUP="$OMP_HOME/backups/mcp.json.$INSTALL_STAMP.bak"
+  HAD_MCP_CONFIG=1
   cp "$MCP_CONFIG" "$MCP_BACKUP"
-  log "backed up MCP config to $MCP_BACKUP"
 else
-  printf '%s\n' '{"mcpServers":{}}' > "$MCP_CONFIG"
-  chmod 600 "$MCP_CONFIG"
+  printf '%s\n' '{"mcpServers":{}}' > "$TMP_ROOT/mcp.original.json"
+fi
+
+MCP_SOURCE="$TMP_ROOT/mcp.original.json"
+if [ "$HAD_MCP_CONFIG" -eq 1 ]; then
+  MCP_SOURCE="$MCP_BACKUP"
 fi
 
 MERGE_SCRIPT="$TMP_ROOT/merge-mcp.js"
 cat > "$MERGE_SCRIPT" <<'MERGE'
-const [configPath, bunPath, installRoot] = process.argv.slice(2);
-const source = await Bun.file(configPath).text();
+const [sourcePath, outputPath, bunPath, installRoot] = process.argv.slice(2);
+const source = await Bun.file(sourcePath).text();
 let config;
 try {
   config = JSON.parse(source);
 } catch (error) {
-  throw new Error(`Cannot parse ${configPath}: ${error.message}`);
+  throw new Error(`Cannot parse ${sourcePath}: ${error.message}`);
 }
 if (!config || typeof config !== "object" || Array.isArray(config)) {
-  throw new Error(`${configPath} must contain a JSON object`);
+  throw new Error(`${sourcePath} must contain a JSON object`);
 }
 if (config.mcpServers === undefined) config.mcpServers = {};
 if (!config.mcpServers || typeof config.mcpServers !== "object" || Array.isArray(config.mcpServers)) {
-  throw new Error(`${configPath}#mcpServers must contain a JSON object`);
+  throw new Error(`${sourcePath}#mcpServers must contain a JSON object`);
 }
 config.mcpServers["omp-instances"] = {
   type: "stdio",
@@ -108,16 +112,58 @@ config.mcpServers["omp-instances"] = {
   cwd: `${installRoot}/packages/mcp-server`,
   timeout: 180000,
 };
-const temporary = `${configPath}.${process.pid}.tmp`;
-await Bun.write(temporary, `${JSON.stringify(config, null, 2)}\n`);
-await Bun.$`chmod 600 ${temporary}`;
-await Bun.$`mv ${temporary} ${configPath}`;
+await Bun.write(outputPath, `${JSON.stringify(config, null, 2)}\n`);
 MERGE
 
-log "merging omp-instances into MCP configuration"
-bun "$MERGE_SCRIPT" "$MCP_CONFIG" "$BUN_BIN" "$INSTALL_ROOT"
+log "validating and staging MCP configuration"
+bun "$MERGE_SCRIPT" "$MCP_SOURCE" "$TMP_ROOT/mcp.merged.json" "$BUN_BIN" "$INSTALL_ROOT"
+chmod 600 "$TMP_ROOT/mcp.merged.json"
+
+mkdir -p "$EXTENSION_BACKUP_DIR"
+if [ -e "$OMP_HOME/extensions/omp-control.ts" ] || [ -L "$OMP_HOME/extensions/omp-control.ts" ]; then
+  HAD_TS_EXTENSION=1
+  cp -P "$OMP_HOME/extensions/omp-control.ts" "$EXTENSION_BACKUP_DIR/omp-control.ts"
+fi
+if [ -e "$OMP_HOME/extensions/omp-control.js" ] || [ -L "$OMP_HOME/extensions/omp-control.js" ]; then
+  HAD_JS_EXTENSION=1
+  cp -P "$OMP_HOME/extensions/omp-control.js" "$EXTENSION_BACKUP_DIR/omp-control.js"
+fi
+if [ "$HAD_TS_EXTENSION" -eq 0 ] && [ "$HAD_JS_EXTENSION" -eq 0 ]; then
+  rmdir "$EXTENSION_BACKUP_DIR"
+fi
+
+if [ -e "$INSTALL_ROOT" ]; then
+  log "archiving previous installation to $ROOT_BACKUP"
+  tar -czf "$ROOT_BACKUP" -C "$(dirname "$INSTALL_ROOT")" "$(basename "$INSTALL_ROOT")"
+fi
+
+log "activating installation"
+ACTIVATING=1
+if [ -e "$INSTALL_ROOT" ]; then
+  PREVIOUS_ROOT="$INSTALL_ROOT.previous.$INSTALL_STAMP"
+  mv "$INSTALL_ROOT" "$PREVIOUS_ROOT"
+fi
+mv "$TMP_ROOT/source" "$INSTALL_ROOT"
+
+rm -f "$OMP_HOME/extensions/omp-control.ts" "$OMP_HOME/extensions/omp-control.js"
+EXTENSION_TEMP="$OMP_HOME/extensions/.omp-control.ts.$$.tmp"
+ln -s "$INSTALL_ROOT/packages/omp-extension/omp-control.ts" "$EXTENSION_TEMP"
+mv "$EXTENSION_TEMP" "$OMP_HOME/extensions/omp-control.ts"
+
+MCP_TEMP="$MCP_CONFIG.$$.tmp"
+cp "$TMP_ROOT/mcp.merged.json" "$MCP_TEMP"
+chmod 600 "$MCP_TEMP"
+mv "$MCP_TEMP" "$MCP_CONFIG"
+
+ACTIVATING=0
+rm -rf "$PREVIOUS_ROOT"
+trap - EXIT HUP INT TERM
+rm -rf "$TMP_ROOT"
 
 log "installation complete"
 printf '%s\n' "Restart OMP processes to activate instance orchestration."
 printf '%s\n' "Installed at: $INSTALL_ROOT"
 printf '%s\n' "MCP config:   $MCP_CONFIG"
+if [ -e "$ROOT_BACKUP" ]; then
+  printf '%s\n' "Previous installation: $ROOT_BACKUP"
+fi

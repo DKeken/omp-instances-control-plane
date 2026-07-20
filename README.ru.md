@@ -94,29 +94,28 @@ curl -fsSL https://raw.githubusercontent.com/DKeken/omp-instances-control-plane/
 
 ## Обновление
 
-Повторно выполните команду установки. Installer скачает выбранную ветку во временный каталог и затем атомарно заменит установленный каталог и symlink extension. Старые OMP extension и MCP config предварительно сохраняются.
+Повторно выполните команду установки. Installer сначала готовит source, locked dependencies и объединённую MCP-конфигурацию, не меняя активные файлы. Затем он архивирует предыдущую установку и атомарно активирует repository, extension symlink и MCP config. Любая ошибка activation восстанавливает предыдущее состояние.
 
 После обновления перезапустите OMP-процессы.
 
 ## Откат и удаление
 
-При обновлении backups лежат в `~/.omp/agent/backups` и содержат timestamp.
+Backups лежат в `~/.omp/agent/backups`; одна установка использует один timestamp.
 
-Восстановление MCP config:
+Для отката обновления остановите OMP-процессы и восстановите repository и MCP config с одинаковым timestamp:
 
 ```sh
+rm -rf ~/.local/share/omp-instances-control-plane
+tar -xzf ~/.omp/agent/backups/omp-instances-control-plane.<timestamp>.tar.gz \
+  -C ~/.local/share
 cp ~/.omp/agent/backups/mcp.json.<timestamp>.bak ~/.omp/agent/mcp.json
 ```
 
-Если до установки существовал runtime extension, восстановите соответствующий backup или сохранённую цель symlink.
+Symlink extension указывает на стабильный installation path, поэтому восстановленный repository автоматически возвращает предыдущий runtime. После отката снова запустите OMP.
 
-Для удаления после первой установки:
+Если использовались `OMP_INSTANCES_HOME`, `OMP_HOME` или `OMP_MCP_CONFIG`, подставьте соответствующие пути.
 
-1. остановите OMP-процессы;
-2. удалите `~/.omp/agent/extensions/omp-control.ts`;
-3. восстановите backup `mcp.json`, созданный installer, либо удалите только entry `mcpServers["omp-instances"]`;
-4. при необходимости удалите `~/.local/share/omp-instances-control-plane`;
-5. запустите OMP снова.
+Для удаления после первой установки остановите OMP, удалите `~/.omp/agent/extensions/omp-control.ts`, восстановите MCP backup либо удалите только `mcpServers["omp-instances"]`, затем удалите installation directory.
 
 ## Безопасность
 
