@@ -47,66 +47,33 @@ All control traffic uses user-only Unix sockets. No TCP listener, browser endpoi
 
 ## Install
 
-### 1. Clone and install
+Run one command:
 
 ```sh
-git clone https://github.com/DKeken/omp-instances-control-plane.git
-cd omp-instances-control-plane
-bun install
+curl -fsSL https://raw.githubusercontent.com/DKeken/omp-instances-control-plane/main/install.sh | sh
 ```
 
-### 2. Install OMP extension
+Installer:
 
-Build self-contained extension, then link or copy generated file into OMP extension directory. Generated bundle has no repository-relative runtime imports.
+- downloads current `main` into `~/.local/share/omp-instances-control-plane`;
+- installs locked Bun dependencies;
+- builds self-contained OMP extension and editor VSIX;
+- backs up existing OMP extension and `mcp.json` under `~/.omp/agent/backups`;
+- merges only `mcpServers["omp-instances"]`, preserving every other MCP server;
+- installs editor extension through `codium` or `code` when either CLI is available.
 
-```sh
-bun run build:omp-extension
-ln -s "$PWD/dist/omp-control.js" ~/.omp/agent/extensions/omp-control.js
-```
+Restart OMP and reload editor windows after completion.
 
-Copying works too:
+Optional environment overrides:
 
-```sh
-cp dist/omp-control.js ~/.omp/agent/extensions/omp-control.js
-```
+| Variable | Purpose |
+| --- | --- |
+| `OMP_INSTANCES_HOME` | Installation directory. |
+| `OMP_HOME` | OMP agent directory; default `~/.omp/agent`. |
+| `OMP_MCP_CONFIG` | MCP JSON path; default `$OMP_HOME/mcp.json`. |
+| `OMP_INSTANCES_REF` | Git branch to install; default `main`. |
 
-### 3. Configure MCP
-
-Merge server entry into OMP MCP configuration. Replace absolute paths:
-
-```json
-{
-  "mcpServers": {
-    "omp-instances": {
-      "type": "stdio",
-      "command": "/absolute/path/to/bun",
-      "args": [
-        "/absolute/path/omp-instances-control-plane/packages/mcp-server/src/server.ts"
-      ],
-      "cwd": "/absolute/path/omp-instances-control-plane/packages/mcp-server",
-      "timeout": 180000
-    }
-  }
-}
-```
-
-Configuration root can differ between MCP hosts. Merge entry; do not overwrite unrelated servers.
-
-### 4. Install editor extension
-
-```sh
-bun run package
-```
-
-Install generated `.vsix` using editor UI or CLI:
-
-```sh
-codium --install-extension packages/vscode-extension/omp-instances-orchestrator-1.0.0.vsix
-# or
-code --install-extension packages/vscode-extension/omp-instances-orchestrator-1.0.0.vsix
-```
-
-Reload editor window. Fleet view appears in Activity Bar.
+Manual installation remains possible by following commands in `install.sh`.
 
 ## Configuration
 
