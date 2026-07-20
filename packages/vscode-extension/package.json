@@ -1,0 +1,259 @@
+{
+  "name": "omp-instances-orchestrator",
+  "displayName": "OMP Instances Orchestrator",
+  "description": "Local VS Code and VSCodium control plane for OMP fleets, terminal ownership, session recovery, and memory watchdogs.",
+  "version": "1.0.0",
+  "publisher": "dkeken",
+  "engines": {
+    "vscode": "^1.126.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ompInstances.createOmp",
+        "title": "Create OMP Tab",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.resumeOmp",
+        "title": "Resume OMP Session",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.launchTeam",
+        "title": "Launch OMP Team",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.sendMessage",
+        "title": "Send Message to OMP",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.broadcastMessage",
+        "title": "Broadcast Message",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.focusOmp",
+        "title": "Focus OMP Tab",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.interruptOmp",
+        "title": "Interrupt OMP",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.restartOmp",
+        "title": "Restart and Resume OMP",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.shutdownOmp",
+        "title": "Shut Down OMP",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.openWindow",
+        "title": "Open Workspace in New Window",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.reloadWindow",
+        "title": "Reload Managed Window",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.renameOmp",
+        "title": "Rename OMP",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.openSession",
+        "title": "Open OMP Session",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.copyId",
+        "title": "Copy ID",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.openRecoveryLog",
+        "title": "Open Recovery Log",
+        "category": "OMP"
+      },
+      {
+        "command": "ompInstances.refresh",
+        "title": "Refresh OMP Orchestrator",
+        "category": "OMP"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ompOrchestrator",
+          "title": "OMP Orchestrator",
+          "icon": "media/orchestrator.svg"
+        }
+      ]
+    },
+    "views": {
+      "ompOrchestrator": [
+        {
+          "id": "ompInstances.instances",
+          "name": "Fleet"
+        },
+        {
+          "id": "ompInstances.health",
+          "name": "Health & Recovery"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "ompInstances.createOmp",
+          "when": "view == ompInstances.instances",
+          "group": "navigation"
+        },
+        {
+          "command": "ompInstances.launchTeam",
+          "when": "view == ompInstances.instances",
+          "group": "navigation"
+        },
+        {
+          "command": "ompInstances.refresh",
+          "when": "view == ompInstances.instances",
+          "group": "navigation"
+        },
+        {
+          "command": "ompInstances.openRecoveryLog",
+          "when": "view == ompInstances.health",
+          "group": "navigation"
+        },
+        {
+          "command": "ompInstances.refresh",
+          "when": "view == ompInstances.health",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ompInstances.focusOmp",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "inline"
+        },
+        {
+          "command": "ompInstances.sendMessage",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "omp@1"
+        },
+        {
+          "command": "ompInstances.renameOmp",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "omp@1"
+        },
+        {
+          "command": "ompInstances.openSession",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "omp@1"
+        },
+        {
+          "command": "ompInstances.interruptOmp",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "omp@2"
+        },
+        {
+          "command": "ompInstances.restartOmp",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "omp@2"
+        },
+        {
+          "command": "ompInstances.shutdownOmp",
+          "when": "view == ompInstances.instances && viewItem == ompInstance",
+          "group": "omp@3"
+        },
+        {
+          "command": "ompInstances.copyId",
+          "when": "view == ompInstances.instances && (viewItem == ompInstance || viewItem == vscodeWindow)",
+          "group": "navigation"
+        },
+        {
+          "command": "ompInstances.createOmp",
+          "when": "view == ompInstances.instances && viewItem == vscodeWindow",
+          "group": "window@1"
+        },
+        {
+          "command": "ompInstances.reloadWindow",
+          "when": "view == ompInstances.instances && viewItem == vscodeWindow",
+          "group": "window@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OMP Orchestrator",
+      "properties": {
+        "ompOrchestrator.ompPath": {
+          "type": "string",
+          "default": "omp",
+          "description": "Absolute OMP executable path."
+        },
+        "ompOrchestrator.bunPath": {
+          "type": "string",
+          "default": "bun",
+          "description": "Absolute Bun executable used by memory supervisor."
+        },
+        "ompOrchestrator.memoryLimitGiB": {
+          "type": "number",
+          "default": 8,
+          "minimum": 5,
+          "maximum": 10,
+          "description": "Aggregate process-tree memory limit for one OMP or VSCodium app before recovery."
+        },
+        "ompOrchestrator.memoryConsecutiveSamples": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 10,
+          "description": "Consecutive memory-limit breaches required before recovery."
+        },
+        "ompOrchestrator.memoryPollSeconds": {
+          "type": "integer",
+          "default": 15,
+          "minimum": 5,
+          "maximum": 60,
+          "description": "Memory watchdog polling interval."
+        },
+        "ompOrchestrator.autoRecover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Restart bloated OMP processes and reload/restart bloated VSCodium process trees."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "check": "tsc --allowJs --checkJs --noEmit --module commonjs --target ES2022 --skipLibCheck extension.js lib/control.js lib/recovery.js supervisor.js",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/vscode": "^1.125.0",
+    "@types/node": "^24.0.15",
+    "@vscode/vsce": "^3.6.0"
+  },
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DKeken/omp-instances-control-plane.git"
+  }
+}
