@@ -47,6 +47,13 @@ async function discoverInstances(): Promise<DiscoveredInstance[]> {
           response = await requestInstance(record, { action: "ping" }, 3_000);
         }
         if (!response.ok) return { ...record, reachable: false, error: response.error };
+        if (response.instance.instanceId !== record.instanceId || response.instance.socketPath !== record.socketPath) {
+          return {
+            ...record,
+            reachable: false,
+            error: `Socket identity mismatch: expected ${record.instanceId} at ${record.socketPath}, received ${response.instance.instanceId} at ${response.instance.socketPath}`,
+          };
+        }
         return { ...response.instance, reachable: true };
       } catch (error) {
         if (!isProcessAlive(record.pid)) {

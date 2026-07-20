@@ -91,7 +91,7 @@ curl -fsSL https://raw.githubusercontent.com/DKeken/omp-instances-control-plane/
 
 ## Updating
 
-Run install command again. Installer prepares source, locked dependencies, and merged MCP configuration before changing active files. It then archives previous installation and atomically activates repository, extension symlink, and MCP config. Any activation error restores previous state.
+Run install command again. Installer prepares source, locked dependencies, and merged MCP configuration before changing active files. It then archives previous installation and activates repository, extension symlink, and MCP config as a rollback-backed transaction. Any activation error restores previous state.
 
 Restart OMP processes so they load new runtime extension and MCP configuration.
 
@@ -112,7 +112,7 @@ Installed extension symlink points to stable installation path, so restored repo
 
 If `OMP_INSTANCES_HOME`, `OMP_HOME`, or `OMP_MCP_CONFIG` was customized, use those paths instead.
 
-For a first-install uninstall, stop OMP processes, remove `~/.omp/agent/extensions/omp-control.ts`, restore MCP backup or delete only `mcpServers["omp-instances"]`, then remove installation directory.
+For a first-install uninstall, stop OMP processes, remove `~/.omp/agent/extensions/omp-control.ts`, delete only `mcpServers["omp-instances"]` from MCP config, then remove installation directory.
 
 ## Security
 
