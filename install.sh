@@ -25,6 +25,80 @@ command -v omp >/dev/null 2>&1 || fail "Oh My Pi must be installed first: https:
 
 BUN_BIN="$(command -v bun)"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/omp-instances-install.XXXXXX")"
+PATH_VALIDATOR="$TMP_ROOT/validate-paths.js"
+cat > "$PATH_VALIDATOR" <<'VALIDATE'
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
+
+async function metadata(candidate) {
+  try {
+    return await lstat(candidate);
+  } catch (error) {
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+async function canonicalize(candidate) {
+  const absolute = path.resolve(candidate.replace(/^~(?=$|\/)/, homedir()));
+  const suffix = [];
+  let ancestor = absolute;
+  let current = await metadata(ancestor);
+  while (!current) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) throw new Error(`Cannot resolve existing ancestor for ${absolute}`);
+    suffix.unshift(path.basename(ancestor));
+    ancestor = parent;
+    current = await metadata(ancestor);
+  }
+  if (!current.isDirectory()) throw new Error(`Existing ancestor is not a directory: ${ancestor}`);
+  return path.join(await realpath(ancestor), ...suffix);
+}
+
+const [rawInstallRoot, rawOmpHome, rawMcpConfig] = process.argv.slice(2);
+const rawInstallAbsolute = path.resolve(rawInstallRoot.replace(/^~(?=$|\/)/, homedir()));
+const rawInstallMetadata = await metadata(rawInstallAbsolute);
+if (rawInstallMetadata?.isSymbolicLink()) {
+  throw new Error(`Existing installation root cannot be a symlink: ${rawInstallAbsolute}`);
+}
+
+const [installRoot, ompHome, mcpConfig, home] = await Promise.all([
+  canonicalize(rawInstallRoot),
+  canonicalize(rawOmpHome),
+  canonicalize(rawMcpConfig),
+  realpath(homedir()),
+]);
+const contains = (parent, child) => child === parent || child.startsWith(`${parent}${path.sep}`);
+
+if (installRoot === path.parse(installRoot).root) throw new Error("Installation root cannot be filesystem root");
+if (contains(installRoot, home)) throw new Error("Installation root cannot be HOME or its ancestor");
+if (contains(installRoot, ompHome)) throw new Error("Installation root cannot be OMP_HOME or its ancestor");
+if (contains(ompHome, installRoot)) throw new Error("Installation root cannot be inside OMP_HOME");
+if (contains(installRoot, mcpConfig)) throw new Error("MCP config cannot be inside installation root");
+
+const target = await metadata(installRoot);
+if (target) {
+  if (!target.isDirectory()) throw new Error(`Existing installation root is not a directory: ${installRoot}`);
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(path.join(installRoot, "package.json"), "utf8"));
+  } catch (error) {
+    throw new Error(`Existing directory is not an OMP Instances installation: ${installRoot} (${error.message})`);
+  }
+  if (manifest?.name !== "omp-instances-control-plane") {
+    throw new Error(`Existing directory has unexpected package identity: ${installRoot}`);
+  }
+}
+
+process.stdout.write(`${installRoot}\n${ompHome}\n${mcpConfig}\n`);
+VALIDATE
+
+VALIDATED_PATHS="$(bun "$PATH_VALIDATOR" "$INSTALL_ROOT" "$OMP_HOME" "$MCP_CONFIG")" || fail "unsafe installation path"
+INSTALL_ROOT="$(printf '%s\n' "$VALIDATED_PATHS" | sed -n '1p')"
+OMP_HOME="$(printf '%s\n' "$VALIDATED_PATHS" | sed -n '2p')"
+MCP_CONFIG="$(printf '%s\n' "$VALIDATED_PATHS" | sed -n '3p')"
+log "validated installation root: $INSTALL_ROOT"
 INSTALL_STAMP="$(date +%Y%m%d%H%M%S)"
 PREVIOUS_ROOT=""
 ACTIVATING=0

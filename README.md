@@ -89,6 +89,8 @@ curl -fsSL https://raw.githubusercontent.com/DKeken/omp-instances-control-plane/
   OMP_INSTANCES_HOME="$HOME/tools/omp-instances" sh
 ```
 
+`OMP_INSTANCES_HOME` is fail-closed because installer archives, swaps, and may remove this directory during rollback. It must be a dedicated path. Installer rejects filesystem root, `HOME`, `OMP_HOME`, their ancestors, paths inside `OMP_HOME`, symlink targets, and existing directories whose `package.json#name` is not `omp-instances-control-plane`. `OMP_MCP_CONFIG` cannot be inside installation root.
+
 ## Updating
 
 Run install command again. Installer prepares source, locked dependencies, and merged MCP configuration before changing active files. It then archives previous installation and activates repository, extension symlink, and MCP config as a rollback-backed transaction. Any activation error restores previous state.
