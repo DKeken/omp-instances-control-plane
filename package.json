@@ -1,15 +1,12 @@
 {
   "name": "omp-instances-control-plane",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "workspaces": [
-    "packages/mcp-server",
-    "packages/vscode-extension"
+    "packages/mcp-server"
   ],
   "scripts": {
-    "check": "bun run build:omp-extension && bun run --cwd packages/mcp-server check && bun run --cwd packages/vscode-extension check",
-    "package": "bun run build:omp-extension && bun run --cwd packages/vscode-extension package",
-    "build:omp-extension": "bun build packages/omp-extension/omp-control.ts --target=bun --format=esm --outfile=dist/omp-control.js --external=@oh-my-pi/pi-coding-agent"
+    "check": "bun run --cwd packages/mcp-server check"
   },
   "engines": {
     "bun": ">=1.3.0"

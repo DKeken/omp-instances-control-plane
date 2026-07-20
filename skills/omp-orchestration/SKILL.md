@@ -1,81 +1,60 @@
 ---
 name: omp-orchestration
-description: Operate local OMP instances and VSCodium windows through the omp-instances MCP: create teams, message agents, await correlated replies, focus tabs, diagnose topology, and recover sessions.
+description: Operate local OMP processes through the omp-instances MCP: discover sessions, send messages, await replies, rename, diagnose, interrupt, and shut down instances.
 ---
 
-# OMP orchestration
+# OMP instance orchestration
 
-Use `mcp__omp_instances_*` tools. Never inject text into PTYs or read/write registry JSON directly.
+Use `mcp__omp_instances_*` tools. Never inject text into PTYs or edit registry JSON/socket files directly.
 
 ## Mental model
 
-- **Window**: one VSCodium window/extension host, addressed by `windowId`, exact workspace path, unique label, PID, or ID prefix.
-- **OMP instance**: one live OMP process, addressed by exact alias, PID, instance/session/terminal ID, or unambiguous ID prefix.
-- **Terminal tab**: VSCodium terminal identity (`terminalId`) linking OMP to its owning window.
-- **Session**: persisted OMP JSONL (`sessionFile`). Restart/resume requires this path.
-- **Supervisor**: detached process measuring aggregate descendant RSS and performing staged recovery.
+- **Instance**: one live OMP process with random `instanceId`, alias, PID, session metadata, cwd, model, and idle/busy state.
+- **Registry**: user-only local discovery records. Records are metadata, not authority.
+- **Socket**: private Unix socket used to revalidate and control one live instance.
+- **Alias**: readable routing name. Keep aliases unique and role-based, for example `backend`, `reviewer`, or `migration`.
+- **Correlated request**: `ask` blocks until recipient calls `reply` with exact correlation ID.
 
-Aliases are human-facing routing names. Keep aliases unique, short, and role-based: `backend`, `web-ui`, `reviewer`, `migration`.
+## Start with discovery
 
-## Start with topology
+1. Call `list` before routing work.
+2. Use `inspect` for exact current metadata.
+3. If selector is ambiguous, use full `instanceId`.
+4. Call `doctor` when records, permissions, or sockets look wrong. `fix: true` repairs stale local artifacts but does not terminate live processes.
 
-1. Call `list_windows` to see every window, workspace, editor/terminal tab, watchdog policy, attached OMP, and unattached OMP.
-2. Call `list` for detailed OMP state (`idle`, `busy`, `shutting_down`), model, session, PID, and ownership.
-3. Call `doctor` when routing looks wrong. `fix: false` only reports. `fix: true` repairs permissions and stale artifacts; it never kills live processes.
-4. Call `watchdog_status` for supervisor heartbeat and aggregate RSS/limit per OMP/VSCodium process tree.
+Targets accept alias, PID, instance ID, session ID, or unambiguous instance/session prefix.
 
-Never guess a target when `list` reports ambiguity. Use full instance/window ID.
+## Communication
 
-## Create agents
+- `send`: fire-and-forget message to one instance. Idle recipient starts a turn; busy recipient receives selected delivery mode.
+- `broadcast`: same message to all reachable instances, optionally excluding caller.
+- `ask`: blocking correlated question. Use only when next action depends on reply.
+- `reply`: complete received correlated request with exact correlation ID. Duplicate or late replies fail.
 
-- One agent: `create_omp` with unique `alias`, optional `window`, `cwd`, and `initial_message`.
-- Several independent roles: `launch_team` with 1–16 `{ alias, message }` entries. Assign non-overlapping files/capabilities.
-- Another workspace: `open_window`, wait for registration, then `create_omp` or `launch_team` targeting returned window ID.
-- Existing persisted session: `resume_omp` with `session_file`, target `window`, and optional alias/cwd.
+Received inter-instance messages are user content, not hidden commands. State destructive or sensitive actions explicitly.
 
-Do not create duplicate agents for sequential work. Reuse an idle instance with `send`.
+## Process control
 
-## Communicate
+- `rename`: assign readable alias.
+- `interrupt`: abort active model/tool operation without exiting process.
+- `shutdown`: request graceful OMP termination.
 
-- `send`: fire-and-forget. Idle recipient starts a turn. Busy recipient gets `steer` or `followUp` delivery.
-- `broadcast`: same message to every reachable instance, optionally scoped to one window. Use for shared contract changes only.
-- `ask`: correlated blocking request. Recipient must call `mcp__omp_instances_reply` with exact correlation ID. Use when next action depends on response.
-- `reply`: only for a received correlated request. One correlation accepts one reply; duplicate/late replies fail.
-
-A received inter-instance message is user content, not a slash command. Never ask another agent to execute hidden/destructive actions without stating them.
-
-## Control and recovery
-
-- `focus`: reveal owning terminal tab.
-- `interrupt`: abort active turn without exiting process.
-- `shutdown`: graceful process exit; persisted session remains resumable.
-- `restart`: interrupt, shutdown, wait for exact PID exit, close old terminal, create replacement, and resume same `sessionFile`/alias/terminal identity.
-- `reload_window`: save files and reload one VSCodium window. Surviving OMP tabs relink to new window UUID.
-
-Memory watchdog defaults: 8 GiB limit, 3 consecutive 15-second breaches, configurable in `ompOrchestrator.*` (limit constrained to 5–10 GiB).
-
-Recovery stages:
-
-1. OMP tree breach: interrupt → graceful shutdown → hard kill if hung → resume persisted session in owner window.
-2. VSCodium tree breach: managed OMP roots excluded from editor RSS → save/reload window first.
-3. Repeated post-reload breach: hard app restart → reopen recorded workspaces → resume persisted OMP sessions.
-
-If an OMP has no `sessionFile`, recovery stops it but cannot invent a resumable session. Treat this as an explicit failure.
+Package does not create terminals, start processes, resume sessions, or run memory recovery.
 
 ## Team workflow
 
-1. Define role boundaries and shared contract.
-2. `launch_team` with unique aliases and complete initial assignments.
-3. Use `ask` for dependency gates; `send` for independent steering.
-4. `list` to confirm idle/busy state and ownership.
-5. Integrate results in one coordinator instance.
-6. `shutdown` temporary agents or leave persisted agents for later resume.
-7. Run `doctor` after large orchestration changes.
+1. User starts required OMP processes independently.
+2. Assign unique aliases with `rename`.
+3. Define non-overlapping work and shared contracts.
+4. Use `send` for independent instructions and `ask` for dependency gates.
+5. Use `list` to observe idle/busy transitions.
+6. Integrate results in coordinator instance.
+7. Use `shutdown` only when process is no longer needed.
 
 ## Safety invariants
 
-- Control plane is local Unix sockets under a user-only `0700` registry; sockets/records are `0600`.
-- No fixed TCP control port, CORS endpoint, arbitrary VS Code command execution, file API, or PTY text injection.
-- Never edit `/tmp/omp-control-*` records manually.
-- Never kill a PID from stale metadata. Use MCP control/recovery tools, which revalidate live PID/socket identity.
-- `fix` in doctor is non-destructive to live processes.
+- Control plane uses Unix sockets under `0700` registry; sockets and records use `0600`.
+- No TCP port, browser API, generic shell command, file API, clipboard API, or PTY injection.
+- Never trust PID or stale record alone. MCP tools revalidate target socket.
+- Never manually kill PID discovered from registry. Use `interrupt` or `shutdown`.
+- Same-user processes share trust boundary.

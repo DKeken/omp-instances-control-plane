@@ -29,37 +29,18 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+
 log "downloading $REPOSITORY@$REF"
 curl -fsSL "$ARCHIVE_URL" -o "$TMP_ROOT/source.tar.gz"
 mkdir -p "$TMP_ROOT/source"
 tar -xzf "$TMP_ROOT/source.tar.gz" -C "$TMP_ROOT/source" --strip-components=1
 
-log "installing dependencies"
+log "installing locked dependencies"
 (
   cd "$TMP_ROOT/source"
   bun install --frozen-lockfile
 )
 
-EDITOR_CLI=""
-if command -v codium >/dev/null 2>&1; then
-  EDITOR_CLI="$(command -v codium)"
-elif command -v code >/dev/null 2>&1; then
-  EDITOR_CLI="$(command -v code)"
-fi
-
-log "building OMP extension"
-(
-  cd "$TMP_ROOT/source"
-  bun run build:omp-extension
-)
-
-if [ -n "$EDITOR_CLI" ]; then
-  log "packaging editor extension"
-  (
-    cd "$TMP_ROOT/source"
-    bun run --cwd packages/vscode-extension package
-  )
-fi
 
 mkdir -p "$(dirname "$INSTALL_ROOT")"
 PREVIOUS_ROOT=""
@@ -76,16 +57,26 @@ fi
 rm -rf "$PREVIOUS_ROOT"
 
 mkdir -p "$OMP_HOME/extensions" "$OMP_HOME/backups"
-EXTENSION_TARGET="$OMP_HOME/extensions/omp-control.js"
-if [ -e "$EXTENSION_TARGET" ]; then
-  cp "$EXTENSION_TARGET" "$OMP_HOME/backups/omp-control.js.$(date +%Y%m%d%H%M%S).bak"
-fi
-cp "$INSTALL_ROOT/dist/omp-control.js" "$EXTENSION_TARGET"
-chmod 600 "$EXTENSION_TARGET"
+INSTALL_STAMP="$(date +%Y%m%d%H%M%S)"
+for extension_path in "$OMP_HOME/extensions/omp-control.ts" "$OMP_HOME/extensions/omp-control.js"; do
+  if [ -e "$extension_path" ] || [ -L "$extension_path" ]; then
+    extension_name="$(basename "$extension_path")"
+    if [ -L "$extension_path" ]; then
+      readlink "$extension_path" > "$OMP_HOME/backups/$extension_name.$INSTALL_STAMP.symlink.bak" || true
+    else
+      cp "$extension_path" "$OMP_HOME/backups/$extension_name.$INSTALL_STAMP.bak"
+    fi
+    rm -f "$extension_path"
+  fi
+done
+EXTENSION_TARGET="$OMP_HOME/extensions/omp-control.ts"
+EXTENSION_TEMP="$OMP_HOME/extensions/.omp-control.ts.$$.tmp"
+ln -s "$INSTALL_ROOT/packages/omp-extension/omp-control.ts" "$EXTENSION_TEMP"
+mv "$EXTENSION_TEMP" "$EXTENSION_TARGET"
 
 mkdir -p "$(dirname "$MCP_CONFIG")"
 if [ -e "$MCP_CONFIG" ]; then
-  MCP_BACKUP="$OMP_HOME/backups/mcp.json.$(date +%Y%m%d%H%M%S).bak"
+  MCP_BACKUP="$OMP_HOME/backups/mcp.json.$INSTALL_STAMP.bak"
   cp "$MCP_CONFIG" "$MCP_BACKUP"
   log "backed up MCP config to $MCP_BACKUP"
 else
@@ -95,7 +86,6 @@ fi
 
 MERGE_SCRIPT="$TMP_ROOT/merge-mcp.js"
 cat > "$MERGE_SCRIPT" <<'MERGE'
-
 const [configPath, bunPath, installRoot] = process.argv.slice(2);
 const source = await Bun.file(configPath).text();
 let config;
@@ -127,15 +117,7 @@ MERGE
 log "merging omp-instances into MCP configuration"
 bun "$MERGE_SCRIPT" "$MCP_CONFIG" "$BUN_BIN" "$INSTALL_ROOT"
 
-if [ -n "$EDITOR_CLI" ]; then
-  VSIX="$INSTALL_ROOT/packages/vscode-extension/omp-instances-orchestrator-1.0.0.vsix"
-  log "installing editor extension with $EDITOR_CLI"
-  "$EDITOR_CLI" --install-extension "$VSIX" --force
-else
-  log "code/codium not found; skipped optional editor extension"
-fi
-
 log "installation complete"
-printf '%s\n' "Restart OMP and reload editor windows to activate the control plane."
+printf '%s\n' "Restart OMP processes to activate instance orchestration."
 printf '%s\n' "Installed at: $INSTALL_ROOT"
 printf '%s\n' "MCP config:   $MCP_CONFIG"

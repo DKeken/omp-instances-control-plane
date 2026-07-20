@@ -57,12 +57,6 @@ function parseControlRequest(value: unknown): ControlRequest {
     if (typeof candidate.alias !== "string") throw new Error("rename requires alias");
     return { action: "rename", alias: candidate.alias };
   }
-  if (candidate.action === "relink") {
-    if (typeof candidate.windowId !== "string" || typeof candidate.terminalId !== "string") {
-      throw new Error("relink requires windowId and terminalId");
-    }
-    return { action: "relink", windowId: candidate.windowId, terminalId: candidate.terminalId };
-  }
   if (candidate.action === "send") {
     if (typeof candidate.message !== "string") throw new Error("send requires message");
     const delivery = candidate.delivery;
@@ -132,8 +126,6 @@ function createProcessControlService(): ProcessControlService {
       startedAt,
       updatedAt: new Date().toISOString(),
       profile: process.env.OMP_PROFILE,
-      windowId: process.env.OMP_WINDOW_ID,
-      terminalId: process.env.OMP_TERMINAL_ID,
     };
   };
 
@@ -159,11 +151,6 @@ function createProcessControlService(): ProcessControlService {
       if (request.action === "rename") {
         alias = validateAlias(request.alias);
         return { ok: true, instance: await refresh(), result: { renamed: true } };
-      }
-      if (request.action === "relink") {
-        process.env.OMP_WINDOW_ID = request.windowId;
-        process.env.OMP_TERMINAL_ID = request.terminalId;
-        return { ok: true, instance: await refresh(), result: { relinked: true } };
       }
       if (request.action === "interrupt") {
         const wasIdle = context.isIdle();

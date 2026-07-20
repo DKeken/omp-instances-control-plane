@@ -14,4 +14,4 @@ Include affected component, reproduction steps, impact, and proposed mitigation 
 
 Control plane trusts processes running as same operating-system user. Unix socket permissions prevent cross-user access but do not isolate hostile same-user processes.
 
-Changes that add network listeners, generic shell/editor execution, raw PTY injection, or broader filesystem access require explicit security review.
+Security-sensitive changes include network listeners, process spawning, generic shell execution, raw PTY injection, broader filesystem access, weaker registry/socket permissions, or accepting stale PID/record identity without live socket response. These changes require explicit security review.

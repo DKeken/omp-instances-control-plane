@@ -36,15 +36,12 @@ export interface InstanceRecord extends SenderIdentity {
   startedAt: string;
   updatedAt: string;
   profile?: string;
-  windowId?: string;
-  terminalId?: string;
 }
 
 export type ControlRequest =
   | { action: "ping" | "inspect" }
   | { action: "send"; message: string; delivery?: Delivery; sender?: SenderIdentity }
   | { action: "rename"; alias: string }
-  | { action: "relink"; windowId: string; terminalId: string }
   | { action: "interrupt" }
   | { action: "shutdown" };
 
