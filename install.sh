@@ -40,7 +40,7 @@ async function metadata(candidate) {
   }
 }
 
-async function canonicalize(candidate) {
+async function canonicalizeDirectory(candidate) {
   const absolute = path.resolve(candidate.replace(/^~(?=$|\/)/, homedir()));
   const suffix = [];
   let ancestor = absolute;
@@ -56,6 +56,15 @@ async function canonicalize(candidate) {
   return path.join(await realpath(ancestor), ...suffix);
 }
 
+async function canonicalizeFile(candidate) {
+  const absolute = path.resolve(candidate.replace(/^~(?=$|\/)/, homedir()));
+  const current = await metadata(absolute);
+  if (current?.isSymbolicLink()) throw new Error(`MCP config cannot be a symlink: ${absolute}`);
+  if (current && !current.isFile()) throw new Error(`MCP config is not a regular file: ${absolute}`);
+  const parent = await canonicalizeDirectory(path.dirname(absolute));
+  return path.join(parent, path.basename(absolute));
+}
+
 const [rawInstallRoot, rawOmpHome, rawMcpConfig] = process.argv.slice(2);
 const rawInstallAbsolute = path.resolve(rawInstallRoot.replace(/^~(?=$|\/)/, homedir()));
 const rawInstallMetadata = await metadata(rawInstallAbsolute);
@@ -64,9 +73,9 @@ if (rawInstallMetadata?.isSymbolicLink()) {
 }
 
 const [installRoot, ompHome, mcpConfig, home] = await Promise.all([
-  canonicalize(rawInstallRoot),
-  canonicalize(rawOmpHome),
-  canonicalize(rawMcpConfig),
+  canonicalizeDirectory(rawInstallRoot),
+  canonicalizeDirectory(rawOmpHome),
+  canonicalizeFile(rawMcpConfig),
   realpath(homedir()),
 ]);
 const contains = (parent, child) => child === parent || child.startsWith(`${parent}${path.sep}`);
