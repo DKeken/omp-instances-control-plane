@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+umask 077
 
 REPOSITORY="DKeken/omp-instances-control-plane"
 REF="${OMP_INSTANCES_REF:-main}"
@@ -75,10 +76,12 @@ log "installing locked dependencies"
 )
 
 mkdir -p "$OMP_HOME/extensions" "$OMP_HOME/backups" "$(dirname "$MCP_CONFIG")" "$(dirname "$INSTALL_ROOT")"
+chmod 700 "$OMP_HOME/backups"
 
 if [ -e "$MCP_CONFIG" ]; then
   HAD_MCP_CONFIG=1
   cp "$MCP_CONFIG" "$MCP_BACKUP"
+  chmod 600 "$MCP_BACKUP"
 else
   printf '%s\n' '{"mcpServers":{}}' > "$TMP_ROOT/mcp.original.json"
 fi
@@ -120,13 +123,20 @@ bun "$MERGE_SCRIPT" "$MCP_SOURCE" "$TMP_ROOT/mcp.merged.json" "$BUN_BIN" "$INSTA
 chmod 600 "$TMP_ROOT/mcp.merged.json"
 
 mkdir -p "$EXTENSION_BACKUP_DIR"
+chmod 700 "$EXTENSION_BACKUP_DIR"
 if [ -e "$OMP_HOME/extensions/omp-control.ts" ] || [ -L "$OMP_HOME/extensions/omp-control.ts" ]; then
   HAD_TS_EXTENSION=1
   cp -P "$OMP_HOME/extensions/omp-control.ts" "$EXTENSION_BACKUP_DIR/omp-control.ts"
+  if [ ! -L "$EXTENSION_BACKUP_DIR/omp-control.ts" ]; then
+    chmod 600 "$EXTENSION_BACKUP_DIR/omp-control.ts"
+  fi
 fi
 if [ -e "$OMP_HOME/extensions/omp-control.js" ] || [ -L "$OMP_HOME/extensions/omp-control.js" ]; then
   HAD_JS_EXTENSION=1
   cp -P "$OMP_HOME/extensions/omp-control.js" "$EXTENSION_BACKUP_DIR/omp-control.js"
+  if [ ! -L "$EXTENSION_BACKUP_DIR/omp-control.js" ]; then
+    chmod 600 "$EXTENSION_BACKUP_DIR/omp-control.js"
+  fi
 fi
 if [ "$HAD_TS_EXTENSION" -eq 0 ] && [ "$HAD_JS_EXTENSION" -eq 0 ]; then
   rmdir "$EXTENSION_BACKUP_DIR"
@@ -135,6 +145,7 @@ fi
 if [ -e "$INSTALL_ROOT" ]; then
   log "archiving previous installation to $ROOT_BACKUP"
   tar -czf "$ROOT_BACKUP" -C "$(dirname "$INSTALL_ROOT")" "$(basename "$INSTALL_ROOT")"
+  chmod 600 "$ROOT_BACKUP"
 fi
 
 log "activating installation"

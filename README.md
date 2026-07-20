@@ -118,6 +118,8 @@ For a first-install uninstall, stop OMP processes, remove `~/.omp/agent/extensio
 
 - Registry directories: `0700`.
 - Records and sockets: `0600`.
+- Backup directory and extension backup directories: `0700`.
+- MCP config backups, installation archives, and copied extension backups: `0600`.
 - Transport: local Unix sockets only.
 - Request and response frames are size-limited.
 - No generic shell execution, file API, HTTP endpoint, clipboard API, or raw PTY injection.

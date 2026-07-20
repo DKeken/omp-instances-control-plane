@@ -121,6 +121,8 @@ Symlink extension указывает на стабильный installation path
 
 - Registry directories имеют mode `0700`.
 - Records и sockets имеют mode `0600`.
+- Backup directory и extension backup directories имеют mode `0700`.
+- MCP config backups, installation archives и скопированные extension backups имеют mode `0600`.
 - Transport работает только через локальные Unix sockets.
 - Размер request/response frames ограничен.
 - Нет generic shell execution, file API, HTTP endpoint, clipboard API и raw PTY injection.
